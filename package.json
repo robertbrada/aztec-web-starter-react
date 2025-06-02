@@ -3,23 +3,30 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "react-app"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
-    "clean": "rm -rf app/dist contracts/target contracts/codegenCache.json",
+    "clean": "rm -rf app/dist contracts/target contracts/codegenCache.json react-app/dist",
     "compile-contracts": "cd contracts && ${AZTEC_NARGO:-aztec-nargo} compile",
     "codegen-contracts": "cd contracts && ${AZTEC_BUILDER:-aztec} codegen ./target -o ./target",
-    "copy-artifacts": "cp contracts/target/*.json contracts/target/*.ts app/artifacts",
+    "copy-artifacts": "cp contracts/target/*.json contracts/target/*.ts app/artifacts && mkdir -p react-app/src/artifacts && cp contracts/target/*.json contracts/target/*.ts react-app/src/artifacts",
     "build-contracts": "yarn clean && yarn compile-contracts && yarn codegen-contracts && yarn copy-artifacts",
     "deploy-contracts": "node --experimental-transform-types scripts/deploy.ts",
     "dev": "webpack serve --mode development",
+    "dev-react": "yarn workspace react-app dev",
     "build-app": "webpack --mode production",
-    "build": "yarn build-contracts && yarn build-app",
+    "build-react": "yarn workspace react-app build",
+    "build": "yarn build-contracts && yarn build-app && yarn build-react",
     "serve": "webpack serve --mode production --port ${PORT:-3000}",
+    "serve-react": "yarn workspace react-app preview",
     "prep-test": "PROVER_ENABLED=false yarn deploy-contracts && yarn build-app",
     "test": "yarn prep-test && yarn playwright test",
-    "lint": "prettier --check ./src"
+    "lint": "prettier --check ./src && yarn workspace react-app lint",
+    "lint-react": "yarn workspace react-app lint"
   },
   "dependencies": {
     "@aztec/accounts": "0.87.4",
@@ -34,19 +41,26 @@
   "devDependencies": {
     "@playwright/test": "1.52.0",
     "@types/node": "^22.15.17",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
     "assert": "^2.1.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "css-loader": "^6.10.0",
     "dotenv-webpack": "^8.0.1",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "globals": "^15.12.0",
     "html-webpack-plugin": "^5.6.0",
     "prettier": "^3.5.3",
     "process": "^0.11.10",
     "stream-browserify": "^3.0.0",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.3.3",
+    "typescript": "^5.6.3",
     "util": "^0.12.5",
+    "vite": "^6.3.5",
     "webpack": "^5.99.6",
     "webpack-cli": "^6.0.1",
     "webpack-dev-server": "^5.2.1"
