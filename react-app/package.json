@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "pino": "^9.7.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "vite-plugin-node-polyfills": "^0.23.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.6",
