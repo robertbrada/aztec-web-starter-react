@@ -11,6 +11,10 @@ import {
   deploymentSalt,
 } from './config';
 import type { VoteResults } from './config';
+import {
+  getInitialTestAccounts,
+  type InitialAccountData,
+} from '@aztec/accounts/testing';
 
 export default function App() {
   const [voteTally, setVoteTally] = useState<VoteResults | null>(null);
@@ -21,6 +25,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [account, setAccount] = useState<AccountWallet | null>(null);
+  const [testAccounts, setTestAccounts] = useState<InitialAccountData[]>([]);
+  const [createdAccounts, setCreatedAccounts] = useState<AccountWallet[]>([]);
 
   useEffect(() => {
     const loadApp = async () => {
@@ -32,6 +38,9 @@ export default function App() {
         const wallet = new EmbeddedWallet(aztecNodeUrl);
         await wallet.initialize();
         console.log('Wallet initialized:', wallet);
+
+        const testAccounts = await getInitialTestAccounts();
+        console.log('Test accounts loaded:', testAccounts);
 
         // Register voting contract with wallet/PXE
         await wallet.registerContract(
@@ -47,6 +56,7 @@ export default function App() {
 
         setWallet(wallet);
         setAccount(account);
+        setTestAccounts(testAccounts);
         console.log('App initialized successfully');
       } catch (err) {
         console.error('Failed to initialize app:', err);
@@ -62,11 +72,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (account && wallet) {
+    if (wallet) {
       console.log('Account connected, updating vote tally');
       updateVoteTally();
     }
-  }, [account, wallet]);
+  }, [wallet]);
 
   async function createAccount() {
     console.log('Creating account()');
@@ -78,6 +88,7 @@ export default function App() {
       setIsCreatingAccount(true);
       setError(null);
       const account = await wallet.createAccountAndConnect();
+      setCreatedAccounts([...createdAccounts, account]);
       setAccount(account);
     } catch (error) {
       console.error('Failed to create account:', error);
@@ -185,9 +196,20 @@ export default function App() {
       {/* <Wallet account={account} wallet={wallet} error={error} /> */}
       <Wallet
         account={account}
+        adminAddress={deployerAddress}
         wallet={wallet}
         error={error}
+        testAccounts={testAccounts}
+        createdAccounts={createdAccounts}
         removeError={() => setError(null)}
+        createNewAccount={createAccount}
+        connectTestAccount={(index: number) => {
+          if (wallet) {
+            wallet.connectTestAccount(index).then((acc) => {
+              setAccount(acc);
+            });
+          }
+        }}
       />
     </div>
   );

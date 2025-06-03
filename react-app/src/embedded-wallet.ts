@@ -16,7 +16,10 @@ import { getEcdsaRAccount } from '@aztec/accounts/ecdsa/lazy';
 import { getSchnorrAccount } from '@aztec/accounts/schnorr/lazy';
 import { getPXEServiceConfig } from '@aztec/pxe/config';
 import { createPXEService } from '@aztec/pxe/client/lazy';
-import { type ContractArtifact, getDefaultInitializer } from '@aztec/stdlib/abi';
+import {
+  type ContractArtifact,
+  getDefaultInitializer,
+} from '@aztec/stdlib/abi';
 import { getInitialTestAccounts } from '@aztec/accounts/testing';
 
 const PROVER_ENABLED = true;
@@ -80,7 +83,12 @@ export class EmbeddedWallet {
   async connectTestAccount(index: number) {
     const testAccounts = await getInitialTestAccounts();
     const account = testAccounts[index];
-    const schnorrAccount = await getSchnorrAccount(this.pxe, account.secret, account.signingKey, account.salt);
+    const schnorrAccount = await getSchnorrAccount(
+      this.pxe,
+      account.secret,
+      account.signingKey,
+      account.salt
+    );
 
     await schnorrAccount.register();
     const wallet = await schnorrAccount.getWallet();
