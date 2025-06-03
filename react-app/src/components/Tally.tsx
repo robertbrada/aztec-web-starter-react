@@ -55,7 +55,7 @@ export function Tally({
       )}
 
       {/* Main Content */}
-      <div className="w-full max-w-xl p-4">
+      <div className="w-full max-w-[32rem] p-4">
         <div className="flex gap-2 mb-6 mt-8 justify-center items-center">
           <img className="w-6 h-6" alt="Logo" src={logo} />
           <h1 className="text-2xl font-bold">Private Voting</h1>
