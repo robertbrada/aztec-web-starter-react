@@ -84,18 +84,18 @@ export function Tally({
                 return (
                   <div
                     key={candidate}
-                    className={`flex items-center gap-4 mb-1 p-3 text-left rounded-lg cursor-pointer ${
+                    className={`flex items-center gap-4 mb-[1px] p-3 text-left rounded-lg cursor-pointer ${
                       isSelected
-                        ? 'border-blue-100 bg-bg-light  border-[1px]'
+                        ? 'border-bg-medium bg-bg-light'
                         : 'border-white hover:bg-bg-light'
                     }`}
                     onClick={() => setSelectedCandidate(parseInt(candidate))}
                   >
                     {/* Radio Button */}
                     {isSelected ? (
-                      <IconCircleCheckFilled className="text-secondary w-8" />
+                      <IconCircleCheckFilled className="text-secondary w-6" />
                     ) : (
-                      <IconCircle className="text-gray-200 w-8" />
+                      <IconCircle className="text-gray-200 w-6" />
                     )}
 
                     <img
@@ -106,14 +106,14 @@ export function Tally({
 
                     {/* Candidate Info */}
                     <div className="flex flex-col gap-1 w-full">
-                      <div className="text-[1.1rem] flex flex-row font-medium ml-2 justify-between items-center">
+                      <div className="text-[1.1rem] flex flex-row font-medium ml-1 justify-between items-center">
                         <div className="flex flex-row gap-2 items-center">
                           <div className="font-bold">{candidateName}</div>
-                          <div className="text-sm font-normal text-text-secondary">
+                          <div className="text-sm font-normal text-text-tertiary">
                             ({percentage}%)
                           </div>
                         </div>
-                        <span className="mr-2 text-sm font-extralight text-text-secondary ">
+                        <span className="mr-2 text-sm font-extralight text-text-tertiary ">
                           {votes} {votes === 1n ? 'vote' : 'votes'}
                         </span>
                       </div>

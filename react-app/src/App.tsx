@@ -15,7 +15,8 @@ import type { VoteResults } from './config';
 export default function App() {
   const [voteTally, setVoteTally] = useState<VoteResults | null>(null);
   const [isVoting, setIsVoting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isLoadingTally, setIsLoadingTally] = useState(true);
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
@@ -24,7 +25,7 @@ export default function App() {
   useEffect(() => {
     const loadApp = async () => {
       try {
-        setIsLoading(true);
+        setIsInitializing(true);
         setError(null);
 
         // Initialize the wallet
@@ -53,7 +54,7 @@ export default function App() {
           err instanceof Error ? err.message : 'Failed to initialize app'
         );
       } finally {
-        setIsLoading(false);
+        setIsInitializing(false);
       }
     };
 
@@ -75,10 +76,14 @@ export default function App() {
     }
     try {
       setIsCreatingAccount(true);
+      setError(null);
       const account = await wallet.createAccountAndConnect();
       setAccount(account);
     } catch (error) {
       console.error('Failed to create account:', error);
+      setError(
+        error instanceof Error ? error.message : 'Failed to create account'
+      );
     } finally {
       setIsCreatingAccount(false);
     }
@@ -87,7 +92,6 @@ export default function App() {
   async function vote(candidateId: number) {
     console.log('Casting vote');
     // Validate candidate number
-    setIsVoting(true);
     if (!wallet) {
       console.error('Wallet not initialized');
       return;
@@ -104,6 +108,8 @@ export default function App() {
     );
 
     try {
+      setIsVoting(true);
+      setError(null);
       const votingContract = await EasyPrivateVotingContract.at(
         AztecAddress.fromString(contractAddress),
         connectedAccount
@@ -117,6 +123,7 @@ export default function App() {
       await updateVoteTally();
     } catch (error) {
       console.error(error);
+      setError(error instanceof Error ? error.message : 'Failed to cast vote');
     } finally {
       setIsVoting(false);
     }
@@ -137,20 +144,31 @@ export default function App() {
 
     const results: VoteResults = {};
 
-    const votingContract = await EasyPrivateVotingContract.at(
-      AztecAddress.fromString(contractAddress),
-      connectedAccount
-    );
+    try {
+      setIsLoadingTally(true);
 
-    await Promise.all(
-      Array.from({ length: 5 }, async (_, i) => {
-        const interaction = votingContract.methods.get_vote(i + 1);
-        const value = await wallet.simulateTransaction(interaction);
-        results[i + 1] = value;
-      })
-    );
-    console.log('Vote tally results:', results);
-    setVoteTally(results);
+      const votingContract = await EasyPrivateVotingContract.at(
+        AztecAddress.fromString(contractAddress),
+        connectedAccount
+      );
+
+      await Promise.all(
+        Array.from({ length: 5 }, async (_, i) => {
+          const interaction = votingContract.methods.get_vote(i + 1);
+          const value = await wallet.simulateTransaction(interaction);
+          results[i + 1] = value;
+        })
+      );
+
+      console.log('Vote tally results:', results);
+      setVoteTally(results);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Failed to update vote tally'
+      );
+    } finally {
+      setIsLoadingTally(false);
+    }
   }
 
   return (
@@ -162,9 +180,15 @@ export default function App() {
         results={voteTally}
         createAccount={createAccount}
         vote={vote}
-        loadingPage={isLoading}
+        loadingPage={isInitializing || isLoadingTally}
       />
-      <Wallet account={account} wallet={wallet} />
+      {/* <Wallet account={account} wallet={wallet} error={error} /> */}
+      <Wallet
+        account={account}
+        wallet={wallet}
+        error={error}
+        removeError={() => setError(null)}
+      />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { AccountWallet } from '@aztec/aztec.js';
 import { EmbeddedWallet } from '../embedded-wallet';
-import { IconCircleFilled } from '@tabler/icons-react';
+import { IconCircleFilled, IconX } from '@tabler/icons-react';
 
 interface WalletProps {
   account: AccountWallet | null;
   wallet: EmbeddedWallet | null;
+  error: string | null;
+  removeError: () => void;
 }
 
 const shortenAddress = (address: string): string => {
@@ -12,7 +14,7 @@ const shortenAddress = (address: string): string => {
   return `${address.slice(0, 12)}...${address.slice(-3)}`;
 };
 
-export function Wallet({ account, wallet }: WalletProps) {
+export function Wallet({ account, error, wallet, removeError }: WalletProps) {
   const walletConnected = wallet !== null;
   const accountConnected = account !== null;
 
@@ -37,12 +39,22 @@ export function Wallet({ account, wallet }: WalletProps) {
               : 'No account connected'}
           </div>
         </div>
-        {/* <div className="text-sm text-gray-600">
-          Account status:{' '}
-          {account
-            ? shortenAddress(account.getAddress().toString())
-            : 'Account not found'}
-        </div> */}
+
+        {/* Spacer to push error to bottom */}
+        <div className="flex-grow"></div>
+
+        {error && (
+          <div className="p-4 bg-red/10 text-sm rounded-md border-[1px] border-red/30 text-red flex items-center gap-2 justify-between">
+            <div>
+              <b>Error: </b>
+              {error}
+            </div>
+            <IconX
+              onClick={removeError}
+              className="w-4 h-4 text-red cursor-pointer"
+            />
+          </div>
+        )}
       </div>
     </aside>
   );
