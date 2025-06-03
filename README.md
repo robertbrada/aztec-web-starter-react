@@ -41,7 +41,8 @@ The script also writes the deployment info to `.env` (which our web-app reads fr
 4. Run the app (development mode):
 
 ```sh
-yarn dev
+yarn dev # for the default app
+yarn dev-react # for the React app
 ```
 
 ### Test the app
