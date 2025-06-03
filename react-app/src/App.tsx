@@ -13,13 +13,7 @@ import {
 import type { VoteResults } from './config';
 
 export default function App() {
-  const [voteTally, setVoteTally] = useState<VoteResults>({
-    1: BigInt(0),
-    2: BigInt(0),
-    3: BigInt(0),
-    4: BigInt(0),
-    5: BigInt(0),
-  });
+  const [voteTally, setVoteTally] = useState<VoteResults | null>(null);
   const [isVoting, setIsVoting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -48,12 +42,7 @@ export default function App() {
         console.log('Voting contract registered');
 
         // Get existing account
-        const account = wallet.getConnectedAccount();
-        if (account) {
-          // TODO: update vote tally
-        } else {
-          console.log('No account connected');
-        }
+        const account = await wallet.connectExistingAccount();
 
         setWallet(wallet);
         setAccount(account);
@@ -70,6 +59,13 @@ export default function App() {
 
     loadApp();
   }, []);
+
+  useEffect(() => {
+    if (account && wallet) {
+      console.log('Account connected, updating vote tally');
+      updateVoteTally();
+    }
+  }, [account, wallet]);
 
   async function createAccount() {
     console.log('Creating account()');
@@ -166,6 +162,7 @@ export default function App() {
         results={voteTally}
         createAccount={createAccount}
         vote={vote}
+        loadingPage={isLoading}
       />
       <Wallet account={account} wallet={wallet} />
     </div>
