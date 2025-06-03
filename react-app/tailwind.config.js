@@ -10,8 +10,8 @@ export default {
         headline2: ['Satoshi'],
       },
       colors: {
-        primary: '#6C51E1',
-        secondary: '#56D8FF',
+        primary: '#898bff',
+        secondary: '#6a36ad',
         'bg-light': '#F6F9FB',
         'bg-medium': '#EBF0F3',
         border: '#D9D9D9',

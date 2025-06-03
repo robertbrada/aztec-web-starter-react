@@ -17,40 +17,127 @@ import {
 } from '@aztec/accounts/testing';
 import { type StoredAccount } from './indexeddb-storage';
 
+interface AppState {
+  voteTally: VoteResults | null;
+  isVoting: boolean;
+  isInitializing: boolean;
+  isLoadingTally: boolean;
+  isCreatingAccount: boolean;
+  isEndingVoting: boolean;
+  error: string | null;
+  wallet: EmbeddedWallet | null;
+  account: AccountWallet | null;
+  testAccounts: InitialAccountData[];
+  voteRecord: Record<string, boolean>;
+  storedTestAccounts: StoredAccount[];
+  storedCreatedAccounts: StoredAccount[];
+}
+
+const INITIAL_STATE: AppState = {
+  voteTally: null,
+  isVoting: false,
+  isInitializing: false,
+  isLoadingTally: false,
+  isCreatingAccount: false,
+  isEndingVoting: false,
+  error: null,
+  wallet: null,
+  account: null,
+  testAccounts: [],
+  voteRecord: {},
+  storedTestAccounts: [],
+  storedCreatedAccounts: [],
+};
+
 export default function App() {
-  const [voteTally, setVoteTally] = useState<VoteResults | null>(null);
-  const [isVoting, setIsVoting] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(false);
-  const [isLoadingTally, setIsLoadingTally] = useState(false);
-  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
-  const [isEndingVoting, setIsEndingVoting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
-  const [account, setAccount] = useState<AccountWallet | null>(null);
-  const [testAccounts, setTestAccounts] = useState<InitialAccountData[]>([]);
-  const [voteRecord, setVoteRecord] = useState<Record<string, boolean>>({}); // map address to vote status
-  const [storedTestAccounts, setStoredTestAccounts] = useState<StoredAccount[]>(
-    []
-  );
-  const [storedCreatedAccounts, setStoredCreatedAccounts] = useState<
-    StoredAccount[]
-  >([]);
+  const [state, setState] = useState<AppState>(INITIAL_STATE);
 
+  function updateState(updates: Partial<AppState>) {
+    setState((prev) => ({ ...prev, ...updates }));
+  }
+
+  function setError(error: string | null) {
+    updateState({ error });
+  }
+
+  async function refreshStoredAccounts() {
+    if (!state.wallet) return;
+
+    try {
+      const [storedTestAccounts, storedCreatedAccounts] = await Promise.all([
+        state.wallet.getStoredTestAccounts(),
+        state.wallet.getStoredCreatedAccounts(),
+      ]);
+
+      // Create new arrays to ensure React detects the change
+      updateState({
+        storedTestAccounts: [...storedTestAccounts],
+        storedCreatedAccounts: [...storedCreatedAccounts],
+      });
+    } catch (error) {
+      console.error('Failed to refresh stored accounts:', error);
+    }
+  }
+
+  async function updateVoteTally() {
+    console.log('Updating vote tally...');
+
+    if (!state.wallet) {
+      console.error('Cannot update tally. Wallet not initialized');
+      return;
+    }
+
+    const connectedAccount = state.wallet.getConnectedAccount();
+    if (!connectedAccount) {
+      console.error('Cannot update tally. No account connected');
+      return;
+    }
+
+    try {
+      updateState({ isLoadingTally: true });
+
+      const votingContract = await EasyPrivateVotingContract.at(
+        AztecAddress.fromString(contractAddress),
+        connectedAccount
+      );
+
+      const results: VoteResults = {};
+      await Promise.all(
+        Array.from({ length: 5 }, async (_, i) => {
+          const candidateId = i + 1;
+          const interaction = votingContract.methods.get_vote(candidateId);
+          const value = await state.wallet!.simulateTransaction(interaction);
+          results[candidateId] = value;
+        })
+      );
+
+      console.log('Vote tally results:', results);
+      updateState({ voteTally: results });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to update vote tally';
+      setError(errorMessage);
+    } finally {
+      updateState({ isLoadingTally: false });
+    }
+  }
+
+  // Initialize app
   useEffect(() => {
-    const loadApp = async () => {
+    async function initializeApp() {
       try {
-        setIsInitializing(true);
-        setError(null);
+        updateState({ isInitializing: true, error: null });
 
-        // Initialize the wallet
+        // Initialize wallet
         const wallet = new EmbeddedWallet(aztecNodeUrl);
         await wallet.initialize();
         console.log('Wallet initialized:', wallet);
 
+        // Load test accounts
         const testAccounts = await getInitialTestAccounts();
         console.log('Test accounts loaded:', testAccounts);
 
-        // Register voting contract with wallet/PXE
+        // Register voting contract
         await wallet.registerContract(
           EasyPrivateVotingContract.artifact,
           AztecAddress.fromString(deployerAddress),
@@ -59,274 +146,243 @@ export default function App() {
         );
         console.log('Voting contract registered');
 
-        // Get existing account
+        // Connect existing account if available
         const account = await wallet.connectExistingAccount();
 
-        // Load stored accounts from IndexedDB
-        const storedTestAccounts = await wallet.getStoredTestAccounts();
-        const storedCreatedAccounts = await wallet.getStoredCreatedAccounts();
+        const [storedTestAccounts, storedCreatedAccounts] = await Promise.all([
+          wallet.getStoredTestAccounts(),
+          wallet.getStoredCreatedAccounts(),
+        ]);
 
-        setWallet(wallet);
-        setAccount(account);
-        setTestAccounts(testAccounts);
-        setStoredTestAccounts(storedTestAccounts);
-        setStoredCreatedAccounts(storedCreatedAccounts);
+        updateState({
+          wallet,
+          account,
+          testAccounts: [...testAccounts], // Ensure new array reference
+          storedTestAccounts: [...storedTestAccounts],
+          storedCreatedAccounts: [...storedCreatedAccounts],
+        });
+
         console.log('App initialized successfully');
       } catch (err) {
         console.error('Failed to initialize app:', err);
-        setError(
-          err instanceof Error ? err.message : 'Failed to initialize app'
-        );
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to initialize app';
+        setError(errorMessage);
       } finally {
-        setIsInitializing(false);
+        updateState({ isInitializing: false });
       }
-    };
+    }
 
-    loadApp();
+    initializeApp();
   }, []);
 
+  // Update tally when account connects
   useEffect(() => {
-    if (account && !voteTally) {
+    if (state.account && !state.voteTally) {
       console.log('Account connected, updating vote tally');
       updateVoteTally();
     }
-  }, [account]);
-
-  const refreshStoredAccounts = async () => {
-    if (!wallet) return;
-
-    try {
-      const storedTestAccounts = await wallet.getStoredTestAccounts();
-      const storedCreatedAccounts = await wallet.getStoredCreatedAccounts();
-      setStoredTestAccounts(storedTestAccounts);
-      setStoredCreatedAccounts(storedCreatedAccounts);
-    } catch (error) {
-      console.error('Failed to refresh stored accounts:', error);
-    }
-  };
+  }, [state.account, state.voteTally]);
 
   async function createAccount() {
-    console.log('Creating account()');
-    if (!wallet) {
+    console.log('Creating account...');
+
+    if (!state.wallet) {
       console.error('Wallet not initialized');
       return;
     }
+
     try {
-      setIsCreatingAccount(true);
-      setError(null);
-      const account = await wallet.createAccountAndConnect();
-      setAccount(account);
+      updateState({ isCreatingAccount: true, error: null });
+      const account = await state.wallet.createAccountAndConnect();
+      updateState({ account });
       await refreshStoredAccounts();
     } catch (error) {
       console.error('Failed to create account:', error);
-      setError(
-        error instanceof Error ? error.message : 'Failed to create account'
-      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to create account';
+      setError(errorMessage);
     } finally {
-      setIsCreatingAccount(false);
+      updateState({ isCreatingAccount: false });
     }
   }
 
   async function connectTestAccount(index: number) {
-    if (!wallet) {
+    if (!state.wallet) {
       console.error('Wallet not initialized');
       return;
     }
 
     try {
       setError(null);
-      const account = await wallet.connectTestAccount(index);
-      setAccount(account);
+      const account = await state.wallet.connectTestAccount(index);
+      updateState({ account });
       await refreshStoredAccounts();
     } catch (error) {
       console.error('Failed to connect test account:', error);
-      setError(
+      const errorMessage =
         error instanceof Error
           ? error.message
-          : 'Failed to connect test account'
-      );
+          : 'Failed to connect test account';
+      setError(errorMessage);
     }
   }
 
   async function connectStoredAccount(accountId: string) {
-    if (!wallet) {
+    if (!state.wallet) {
       console.error('Wallet not initialized');
       return;
     }
 
     try {
       setError(null);
-      const account = await wallet.connectStoredAccount(accountId);
-      setAccount(account);
+      const account = await state.wallet.connectStoredAccount(accountId);
+      updateState({ account });
     } catch (error) {
       console.error('Failed to connect stored account:', error);
-      setError(
+      const errorMessage =
         error instanceof Error
           ? error.message
-          : 'Failed to connect stored account'
-      );
+          : 'Failed to connect stored account';
+      setError(errorMessage);
     }
   }
 
   async function resetWallets() {
-    if (!wallet) {
+    if (!state.wallet) {
       console.error('Wallet not initialized');
       return;
     }
 
     try {
       setError(null);
-      await wallet.resetStoredData();
+      await state.wallet.resetStoredData();
 
-      // Clear all local state
-      setAccount(null);
-      setStoredTestAccounts([]);
-      setStoredCreatedAccounts([]);
+      updateState({
+        account: null,
+        storedTestAccounts: [],
+        storedCreatedAccounts: [],
+      });
 
       console.log('All stored data has been reset');
     } catch (error) {
       console.error('Failed to reset stored data:', error);
-      setError(
-        error instanceof Error ? error.message : 'Failed to reset stored data'
-      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to reset stored data';
+      setError(errorMessage);
     }
   }
 
   async function vote(candidateId: number) {
-    if (!wallet) {
+    if (!state.wallet) {
       console.error('Wallet not initialized');
       return;
     }
 
-    const connectedAccount = wallet.getConnectedAccount();
+    const connectedAccount = state.wallet.getConnectedAccount();
     if (!connectedAccount) {
-      console.error('Cannot vote tally. No account connected');
+      console.error('Cannot vote. No account connected');
       return;
     }
 
     try {
-      setIsVoting(true);
-      setError(null);
+      updateState({ isVoting: true, error: null });
+
       const votingContract = await EasyPrivateVotingContract.at(
         AztecAddress.fromString(contractAddress),
         connectedAccount
       );
+
       const interaction = votingContract.methods.cast_vote(candidateId);
-      await wallet.sendTransaction(interaction);
+      await state.wallet.sendTransaction(interaction);
+
       await updateVoteTally();
-      // NOTE: here I expect the transaction succeeded
-      setVoteRecord((prev) => ({
-        ...prev,
+
+      // Mark account as voted - create new object to ensure React updates
+      const newVoteRecord = {
+        ...state.voteRecord,
         [connectedAccount.getAddress().toString()]: true,
-      }));
+      };
+
+      updateState({
+        voteRecord: newVoteRecord,
+      });
     } catch (error) {
-      console.error(error);
-      setError(error instanceof Error ? error.message : 'Failed to cast vote');
+      console.error('Vote failed:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to cast vote';
+      setError(errorMessage);
     } finally {
-      setIsVoting(false);
+      updateState({ isVoting: false });
     }
   }
 
   async function endVoting() {
-    if (!wallet) {
+    if (!state.wallet) {
       console.error('Wallet not initialized');
       return;
     }
 
-    const connectedAccount = wallet.getConnectedAccount();
+    const connectedAccount = state.wallet.getConnectedAccount();
     if (!connectedAccount) {
       console.error('Cannot end vote. No account connected');
       return;
     }
 
     try {
-      setIsEndingVoting(true);
-      setError(null);
+      updateState({ isEndingVoting: true, error: null });
+
       const votingContract = await EasyPrivateVotingContract.at(
         AztecAddress.fromString(contractAddress),
         connectedAccount
       );
+
       const interaction = votingContract.methods.end_vote();
-      await wallet.sendTransaction(interaction);
+      await state.wallet.sendTransaction(interaction);
+
       await updateVoteTally();
     } catch (error) {
-      console.error(error);
-      setError(error instanceof Error ? error.message : 'Failed to end voting');
+      console.error('Failed to end voting:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to end voting';
+      setError(errorMessage);
     } finally {
-      setIsEndingVoting(false);
+      updateState({ isEndingVoting: false });
     }
   }
 
-  async function updateVoteTally() {
-    console.log('Updating vote tally()');
-    if (!wallet) {
-      console.error('Cannot update tally. Wallet not initialized');
-      return;
-    }
-
-    const connectedAccount = wallet.getConnectedAccount();
-    if (!connectedAccount) {
-      console.error('Cannot update tally. No account connected');
-      return;
-    }
-
-    const results: VoteResults = {};
-
-    try {
-      setIsLoadingTally(true);
-
-      const votingContract = await EasyPrivateVotingContract.at(
-        AztecAddress.fromString(contractAddress),
-        connectedAccount
-      );
-
-      await Promise.all(
-        Array.from({ length: 5 }, async (_, i) => {
-          const interaction = votingContract.methods.get_vote(i + 1);
-          const value = await wallet.simulateTransaction(interaction);
-          results[i + 1] = value;
-        })
-      );
-
-      console.log('Vote tally results:', results);
-      setVoteTally(results);
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : 'Failed to update vote tally'
-      );
-    } finally {
-      setIsLoadingTally(false);
-    }
+  function removeError() {
+    setError(null);
   }
 
   return (
     <div className="flex flex-col-reverse lg:flex-row">
       <Tally
-        account={account}
-        isCreatingAccount={isCreatingAccount}
-        isVoting={isVoting}
-        results={voteTally}
+        account={state.account}
+        isCreatingAccount={state.isCreatingAccount}
+        isVoting={state.isVoting}
+        results={state.voteTally}
+        loadingPage={state.isInitializing || state.isLoadingTally}
         createAccount={createAccount}
         vote={vote}
-        loadingPage={isInitializing || isLoadingTally}
       />
       <Wallet
-        account={account}
+        account={state.account}
         adminAddress={deployerAddress}
-        wallet={wallet}
-        error={error}
-        testAccounts={testAccounts}
-        createdAccounts={storedCreatedAccounts}
-        creatingAccount={isCreatingAccount}
-        storedTestAccounts={storedTestAccounts}
-        removeError={() => setError(null)}
+        wallet={state.wallet}
+        error={state.error}
+        testAccounts={state.testAccounts}
+        createdAccounts={state.storedCreatedAccounts}
+        creatingAccount={state.isCreatingAccount}
+        storedTestAccounts={state.storedTestAccounts}
+        endingVoting={state.isEndingVoting}
+        voteRecord={state.voteRecord}
+        removeError={removeError}
         createNewAccount={createAccount}
         connectTestAccount={connectTestAccount}
         connectStoredAccount={connectStoredAccount}
         resetWallets={resetWallets}
         endVoting={endVoting}
-        endingVoting={isEndingVoting}
-        voteRecord={voteRecord}
       />
     </div>
   );
