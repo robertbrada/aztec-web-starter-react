@@ -28,6 +28,7 @@ export default function App() {
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [account, setAccount] = useState<AccountWallet | null>(null);
   const [testAccounts, setTestAccounts] = useState<InitialAccountData[]>([]);
+  const [voteRecord, setVoteRecord] = useState<Record<string, boolean>>({}); // map address to vote status
   const [storedTestAccounts, setStoredTestAccounts] = useState<StoredAccount[]>(
     []
   );
@@ -213,6 +214,11 @@ export default function App() {
       const interaction = votingContract.methods.cast_vote(candidateId);
       await wallet.sendTransaction(interaction);
       await updateVoteTally();
+      // NOTE: here I expect the transaction succeeded
+      setVoteRecord((prev) => ({
+        ...prev,
+        [connectedAccount.getAddress().toString()]: true,
+      }));
     } catch (error) {
       console.error(error);
       setError(error instanceof Error ? error.message : 'Failed to cast vote');
@@ -320,6 +326,7 @@ export default function App() {
         resetWallets={resetWallets}
         endVoting={endVoting}
         endingVoting={isEndingVoting}
+        voteRecord={voteRecord}
       />
     </div>
   );

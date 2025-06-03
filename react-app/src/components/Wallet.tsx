@@ -14,6 +14,7 @@ interface WalletProps {
   adminAddress: string;
   creatingAccount: boolean;
   endingVoting: boolean;
+  voteRecord: Record<string, boolean>;
   removeError: () => void;
   connectTestAccount: (index: number) => void;
   connectStoredAccount: (accountId: string) => void;
@@ -36,6 +37,7 @@ export function Wallet({
   adminAddress,
   creatingAccount,
   endingVoting,
+  voteRecord,
   removeError,
   connectTestAccount,
   connectStoredAccount,
@@ -136,14 +138,21 @@ export function Wallet({
               .map((storedAccount, index) => {
                 const accountIsConnected =
                   connectedAccountAddress === storedAccount.address;
+                const accountVoted = voteRecord[storedAccount.address] === true;
 
                 return (
                   <div
                     key={storedAccount.id}
                     className="text-sm text-left justify-between flex items-center"
                   >
-                    <div className="text-text-secondary">
-                      #{index + 1} - {shortenAddress(storedAccount.address)}
+                    <div className="text-text-secondary flex items-center gap-2">
+                      <div>
+                        {' '}
+                        #{index + 1} - {shortenAddress(storedAccount.address)}
+                      </div>
+                      {accountVoted && (
+                        <div className="text-xs font-bold">(voted)</div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 h-2">
