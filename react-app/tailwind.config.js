@@ -17,7 +17,7 @@ export default {
         border: '#D9D9D9',
         'text-primary': '#2D3748',
         'text-secondary': '#606d81',
-        'text-tertiary': '#CBD5E0',
+        'text-tertiary': '#9C9FA3',
         green: '#50E690',
         red: '#DB2955',
       },
