@@ -15,18 +15,24 @@ import {
   getInitialTestAccounts,
   type InitialAccountData,
 } from '@aztec/accounts/testing';
+import { type StoredAccount } from './indexeddb-storage';
 
 export default function App() {
   const [voteTally, setVoteTally] = useState<VoteResults | null>(null);
   const [isVoting, setIsVoting] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [isLoadingTally, setIsLoadingTally] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [isLoadingTally, setIsLoadingTally] = useState(false);
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [account, setAccount] = useState<AccountWallet | null>(null);
   const [testAccounts, setTestAccounts] = useState<InitialAccountData[]>([]);
-  const [createdAccounts, setCreatedAccounts] = useState<AccountWallet[]>([]);
+  const [storedTestAccounts, setStoredTestAccounts] = useState<StoredAccount[]>(
+    []
+  );
+  const [storedCreatedAccounts, setStoredCreatedAccounts] = useState<
+    StoredAccount[]
+  >([]);
 
   useEffect(() => {
     const loadApp = async () => {
@@ -54,9 +60,15 @@ export default function App() {
         // Get existing account
         const account = await wallet.connectExistingAccount();
 
+        // Load stored accounts from IndexedDB
+        const storedTestAccounts = await wallet.getStoredTestAccounts();
+        const storedCreatedAccounts = await wallet.getStoredCreatedAccounts();
+
         setWallet(wallet);
         setAccount(account);
         setTestAccounts(testAccounts);
+        setStoredTestAccounts(storedTestAccounts);
+        setStoredCreatedAccounts(storedCreatedAccounts);
         console.log('App initialized successfully');
       } catch (err) {
         console.error('Failed to initialize app:', err);
@@ -72,11 +84,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (wallet) {
+    if (account && !voteTally) {
       console.log('Account connected, updating vote tally');
       updateVoteTally();
     }
-  }, [wallet]);
+  }, [account]);
+
+  const refreshStoredAccounts = async () => {
+    if (!wallet) return;
+
+    try {
+      const storedTestAccounts = await wallet.getStoredTestAccounts();
+      const storedCreatedAccounts = await wallet.getStoredCreatedAccounts();
+      setStoredTestAccounts(storedTestAccounts);
+      setStoredCreatedAccounts(storedCreatedAccounts);
+    } catch (error) {
+      console.error('Failed to refresh stored accounts:', error);
+    }
+  };
 
   async function createAccount() {
     console.log('Creating account()');
@@ -88,8 +113,8 @@ export default function App() {
       setIsCreatingAccount(true);
       setError(null);
       const account = await wallet.createAccountAndConnect();
-      setCreatedAccounts([...createdAccounts, account]);
       setAccount(account);
+      await refreshStoredAccounts();
     } catch (error) {
       console.error('Failed to create account:', error);
       setError(
@@ -100,9 +125,72 @@ export default function App() {
     }
   }
 
+  async function connectTestAccount(index: number) {
+    if (!wallet) {
+      console.error('Wallet not initialized');
+      return;
+    }
+
+    try {
+      setError(null);
+      const account = await wallet.connectTestAccount(index);
+      setAccount(account);
+      await refreshStoredAccounts();
+    } catch (error) {
+      console.error('Failed to connect test account:', error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to connect test account'
+      );
+    }
+  }
+
+  async function connectStoredAccount(accountId: string) {
+    if (!wallet) {
+      console.error('Wallet not initialized');
+      return;
+    }
+
+    try {
+      setError(null);
+      const account = await wallet.connectStoredAccount(accountId);
+      setAccount(account);
+    } catch (error) {
+      console.error('Failed to connect stored account:', error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to connect stored account'
+      );
+    }
+  }
+
+  async function resetWallets() {
+    if (!wallet) {
+      console.error('Wallet not initialized');
+      return;
+    }
+
+    try {
+      setError(null);
+      await wallet.resetStoredData();
+
+      // Clear all local state
+      setAccount(null);
+      setStoredTestAccounts([]);
+      setStoredCreatedAccounts([]);
+
+      console.log('All stored data has been reset');
+    } catch (error) {
+      console.error('Failed to reset stored data:', error);
+      setError(
+        error instanceof Error ? error.message : 'Failed to reset stored data'
+      );
+    }
+  }
+
   async function vote(candidateId: number) {
-    console.log('Casting vote');
-    // Validate candidate number
     if (!wallet) {
       console.error('Wallet not initialized');
       return;
@@ -114,10 +202,6 @@ export default function App() {
       return;
     }
 
-    console.log(
-      `Casting vote for candidate ${candidateId} from account ${connectedAccount.getAddress()}`
-    );
-
     try {
       setIsVoting(true);
       setError(null);
@@ -125,11 +209,7 @@ export default function App() {
         AztecAddress.fromString(contractAddress),
         connectedAccount
       );
-      console.log(
-        `Voting contract address: ${votingContract.address.toString()}`
-      );
       const interaction = votingContract.methods.cast_vote(candidateId);
-      console.log(`Interaction: ${interaction.toString()}`);
       await wallet.sendTransaction(interaction);
       await updateVoteTally();
     } catch (error) {
@@ -193,23 +273,20 @@ export default function App() {
         vote={vote}
         loadingPage={isInitializing || isLoadingTally}
       />
-      {/* <Wallet account={account} wallet={wallet} error={error} /> */}
       <Wallet
         account={account}
         adminAddress={deployerAddress}
         wallet={wallet}
         error={error}
         testAccounts={testAccounts}
-        createdAccounts={createdAccounts}
+        createdAccounts={storedCreatedAccounts}
+        creatingAccount={isCreatingAccount}
+        storedTestAccounts={storedTestAccounts}
         removeError={() => setError(null)}
         createNewAccount={createAccount}
-        connectTestAccount={(index: number) => {
-          if (wallet) {
-            wallet.connectTestAccount(index).then((acc) => {
-              setAccount(acc);
-            });
-          }
-        }}
+        connectTestAccount={connectTestAccount}
+        connectStoredAccount={connectStoredAccount}
+        resetWallets={resetWallets}
       />
     </div>
   );

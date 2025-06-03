@@ -6,6 +6,10 @@ import logo from '/page-logo.svg';
 import aztecLogo from '/aztec-logo.svg';
 import type { AccountWallet } from '@aztec/aztec.js';
 
+// Extract common button styles
+const buttonClass =
+  'p-4 font-bold bg-gradient-to-r from-secondary to-primary text-white disabled:opacity-50 rounded-full min-w-48 hover:bg-gradient-to-r hover:from-secondary hover:to-secondary';
+
 interface TallyProps {
   account: AccountWallet | null;
   isCreatingAccount: boolean;
@@ -40,6 +44,22 @@ export function Tally({
       vote(selectedCandidate);
       setSelectedCandidate(null);
     }
+  };
+
+  const getButtonText = () => {
+    if (account) {
+      if (isCreatingAccount) return 'Creating Account...';
+      if (isVoting) return 'Casting vote...';
+      if (selectedCandidate === null) return 'Select a Candidate';
+      return `Vote for ${getCandidateName(selectedCandidate)}`;
+    }
+    return isCreatingAccount ? 'Creating Account...' : 'Create Account';
+  };
+
+  const isButtonDisabled = () => {
+    return account
+      ? selectedCandidate === null || isCreatingAccount
+      : isCreatingAccount;
   };
 
   const totalVotes = results
@@ -141,30 +161,16 @@ export function Tally({
           )}
 
           {/* Vote or Create Account Buttons */}
-          {account ? (
-            <button
-              className="p-4 font-bold bg-gradient-to-r from-secondary to-primary text-white disabled:opacity-50 rounded-full min-w-48 hover:bg-gradient-to-r hover:from-secondary hover:to-secondary"
-              onClick={handleVote}
-              disabled={selectedCandidate === null || isCreatingAccount}
-            >
-              {isVoting
-                ? 'Casting vote...'
-                : selectedCandidate === null
-                  ? 'Select a Candidate'
-                  : `Vote for ${getCandidateName(selectedCandidate)}`}
-            </button>
-          ) : (
-            <button
-              className="p-4 font-bold bg-gradient-to-r from-secondary to-primary text-white disabled:opacity-50 rounded-full min-w-48 hover:bg-gradient-to-r hover:from-secondary hover:to-secondary"
-              onClick={createAccount}
-              disabled={isCreatingAccount}
-            >
-              {isCreatingAccount ? 'Creating Account...' : 'Create Account'}
-            </button>
-          )}
+          <button
+            className={buttonClass}
+            onClick={account ? handleVote : createAccount}
+            disabled={isButtonDisabled()}
+          >
+            {getButtonText()}
+          </button>
         </div>
-        <div className="flex gap-2 text-xs items-center mx-auto mt-20 justify-center">
-          <div className="opacity-50">Powered by</div>
+        <div className="flex gap-2 text-xs items-center mx-auto mt-10 justify-center">
+          <div className="opacity-100 text-text-secondary">Powered by</div>
           <img src={aztecLogo} alt="Aztec Logo" className="h-3" />
         </div>
       </div>

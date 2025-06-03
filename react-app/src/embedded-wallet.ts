@@ -8,6 +8,7 @@ import {
   SponsoredFeePaymentMethod,
   type PXE,
   AccountWallet,
+  Fq,
 } from '@aztec/aztec.js';
 import { SponsoredFPCContractArtifact } from '@aztec/noir-contracts.js/SponsoredFPC';
 import { SPONSORED_FPC_SALT } from '@aztec/constants';
@@ -21,17 +22,18 @@ import {
   getDefaultInitializer,
 } from '@aztec/stdlib/abi';
 import { getInitialTestAccounts } from '@aztec/accounts/testing';
+import { indexedDBStorage, type StoredAccount } from './indexeddb-storage';
 
 const PROVER_ENABLED = true;
 
 const logger = createLogger('wallet');
-const LocalStorageKey = 'aztec-account';
 
-// This is a minimal implementation of an Aztec wallet, that saves the private keys in local storage.
+// This is a minimal implementation of an Aztec wallet, that saves the private keys in IndexedDB.
 // This does not implement `@aztec.js/Wallet` interface though
 // This is not meant for production use
 export class EmbeddedWallet {
   private pxe!: PXE;
+  d;
   connectedAccount: AccountWallet | null = null;
 
   private nodeUrl: string;
@@ -41,6 +43,8 @@ export class EmbeddedWallet {
   }
 
   async initialize() {
+    await indexedDBStorage.initialize();
+
     // Create Aztec Node Client
     const aztecNode = await createAztecNodeClient(this.nodeUrl);
 
@@ -83,6 +87,40 @@ export class EmbeddedWallet {
   async connectTestAccount(index: number) {
     const testAccounts = await getInitialTestAccounts();
     const account = testAccounts[index];
+
+    // Store test account in IndexedDB if not already stored (for future reconnections)
+    const accountId = `test_${index}`;
+    const existingAccount = await indexedDBStorage.getAccount(accountId);
+
+    if (!existingAccount) {
+      // Convert signing key to hex string for storage
+      let signingKeyHex: string;
+      if (
+        account.signingKey instanceof Uint8Array ||
+        Buffer.isBuffer(account.signingKey)
+      ) {
+        signingKeyHex = Buffer.from(account.signingKey).toString('hex');
+      } else if (typeof account.signingKey === 'string') {
+        signingKeyHex = account.signingKey;
+      } else {
+        // Fallback: convert to string and then to hex
+        signingKeyHex = Buffer.from(String(account.signingKey)).toString('hex');
+      }
+
+      const storedAccount: StoredAccount = {
+        id: accountId,
+        address: account.address.toString(),
+        signingKey: signingKeyHex,
+        secretKey: account.secret.toString(),
+        salt: account.salt.toString(),
+        type: 'test',
+        index: index,
+        createdAt: Date.now(),
+      };
+      await indexedDBStorage.storeAccount(storedAccount);
+    }
+
+    // Use the original account data for connection (this was working before)
     const schnorrAccount = await getSchnorrAccount(
       this.pxe,
       account.secret,
@@ -94,6 +132,7 @@ export class EmbeddedWallet {
     const wallet = await schnorrAccount.getWallet();
 
     this.connectedAccount = wallet;
+    await indexedDBStorage.setCurrentAccount(accountId);
     return wallet;
   }
 
@@ -136,17 +175,23 @@ export class EmbeddedWallet {
 
     logger.info('Account deployed', receipt);
 
-    // Store the account in local storage
+    // Store the account in IndexedDB
     const ecdsaWallet = await ecdsaAccount.getWallet();
-    localStorage.setItem(
-      LocalStorageKey,
-      JSON.stringify({
-        address: ecdsaWallet.getAddress().toString(),
-        signingKey: signingKey.toString('hex'),
-        secretKey: secretKey.toString(),
-        salt: salt.toString(),
-      })
-    );
+    const accountId = `created_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const signingKeyHex = Buffer.from(signingKey).toString('hex');
+
+    const storedAccount: StoredAccount = {
+      id: accountId,
+      address: ecdsaWallet.getAddress().toString(),
+      signingKey: signingKeyHex,
+      secretKey: secretKey.toString(),
+      salt: salt.toString(),
+      type: 'created',
+      createdAt: Date.now(),
+    };
+
+    await indexedDBStorage.storeAccount(storedAccount);
+    await indexedDBStorage.setCurrentAccount(accountId);
 
     // Register the account with PXE
     await ecdsaAccount.register();
@@ -156,25 +201,161 @@ export class EmbeddedWallet {
   }
 
   async connectExistingAccount() {
-    // Read key from local storage and create the account
-    const account = localStorage.getItem(LocalStorageKey);
-    if (!account) {
+    // Get current account from IndexedDB
+    const currentAccountId = await indexedDBStorage.getCurrentAccount();
+    if (!currentAccountId) {
       return null;
     }
-    const parsed = JSON.parse(account);
 
-    const ecdsaAccount = await getEcdsaRAccount(
-      this.pxe,
-      Fr.fromString(parsed.secretKey),
-      Buffer.from(parsed.signingKey, 'hex'),
-      Fr.fromString(parsed.salt)
-    );
+    const storedAccount = await indexedDBStorage.getAccount(currentAccountId);
+    if (!storedAccount) {
+      return null;
+    }
 
-    await ecdsaAccount.register();
-    const ecdsaWallet = await ecdsaAccount.getWallet();
+    try {
+      let wallet: AccountWallet;
 
-    this.connectedAccount = ecdsaWallet;
-    return ecdsaWallet;
+      if (storedAccount.type === 'test') {
+        // For test accounts, use Schnorr account
+        const signingKeyBuffer = Buffer.from(storedAccount.signingKey, 'hex');
+        const secretKey = Fr.fromString(storedAccount.secretKey);
+        const salt = Fr.fromString(storedAccount.salt);
+        const signingKey = Fq.fromBuffer(signingKeyBuffer);
+
+        const schnorrAccount = await getSchnorrAccount(
+          this.pxe,
+          secretKey,
+          signingKey,
+          salt
+        );
+
+        // Try to register, but catch if already registered
+        try {
+          await schnorrAccount.register();
+        } catch (error) {
+          console.log('Account may already be registered:', error);
+        }
+        wallet = await schnorrAccount.getWallet();
+      } else {
+        // For created accounts, use ECDSA account
+        const signingKeyBuffer = Buffer.from(storedAccount.signingKey, 'hex');
+        const secretKey = Fr.fromString(storedAccount.secretKey);
+        const salt = Fr.fromString(storedAccount.salt);
+
+        const ecdsaAccount = await getEcdsaRAccount(
+          this.pxe,
+          secretKey,
+          signingKeyBuffer,
+          salt
+        );
+
+        // Try to register, but catch if already registered
+        try {
+          await ecdsaAccount.register();
+        } catch (error) {
+          console.log('Account may already be registered:', error);
+        }
+        wallet = await ecdsaAccount.getWallet();
+      }
+
+      this.connectedAccount = wallet;
+      return wallet;
+    } catch (error) {
+      console.error('Error connecting existing account:', error);
+      // Clear the current account if there's an issue
+      await indexedDBStorage.setCurrentAccount(null);
+      return null;
+    }
+  }
+
+  // Get all stored test accounts
+  async getStoredTestAccounts(): Promise<StoredAccount[]> {
+    return await indexedDBStorage.getAccountsByType('test');
+  }
+
+  // Get all stored created accounts
+  async getStoredCreatedAccounts(): Promise<StoredAccount[]> {
+    return await indexedDBStorage.getAccountsByType('created');
+  }
+
+  // Connect to a specific stored account
+  async connectStoredAccount(accountId: string): Promise<AccountWallet> {
+    const storedAccount = await indexedDBStorage.getAccount(accountId);
+    if (!storedAccount) {
+      throw new Error(`Account with ID ${accountId} not found`);
+    }
+
+    let wallet: AccountWallet;
+
+    try {
+      if (storedAccount.type === 'test') {
+        // For test accounts, use Schnorr account
+        const signingKeyBuffer = Buffer.from(storedAccount.signingKey, 'hex');
+        const secretKey = Fr.fromString(storedAccount.secretKey);
+        const salt = Fr.fromString(storedAccount.salt);
+        const signingKey = Fq.fromBuffer(signingKeyBuffer);
+
+        const schnorrAccount = await getSchnorrAccount(
+          this.pxe,
+          secretKey,
+          signingKey,
+          salt
+        );
+
+        // Try to register, but catch if already registered
+        try {
+          await schnorrAccount.register();
+        } catch (error) {
+          console.log('Account may already be registered:', error);
+        }
+        wallet = await schnorrAccount.getWallet();
+      } else {
+        // For created accounts, use ECDSA account
+        const signingKeyBuffer = Buffer.from(storedAccount.signingKey, 'hex');
+        const secretKey = Fr.fromString(storedAccount.secretKey);
+        const salt = Fr.fromString(storedAccount.salt);
+
+        const ecdsaAccount = await getEcdsaRAccount(
+          this.pxe,
+          secretKey,
+          signingKeyBuffer,
+          salt
+        );
+
+        // Try to register, but catch if already registered
+        try {
+          await ecdsaAccount.register();
+        } catch (error) {
+          console.log('Account may already be registered:', error);
+        }
+        wallet = await ecdsaAccount.getWallet();
+      }
+
+      this.connectedAccount = wallet;
+      await indexedDBStorage.setCurrentAccount(accountId);
+      return wallet;
+    } catch (error) {
+      console.error('Error connecting stored account:', error);
+      throw error;
+    }
+  }
+
+  // Delete a stored account
+  async deleteStoredAccount(accountId: string): Promise<void> {
+    await indexedDBStorage.deleteAccount(accountId);
+
+    // If this was the current account, clear the current account setting
+    const currentAccountId = await indexedDBStorage.getCurrentAccount();
+    if (currentAccountId === accountId) {
+      await indexedDBStorage.setCurrentAccount(null);
+      this.connectedAccount = null;
+    }
+  }
+
+  // Reset all stored data
+  async resetStoredData(): Promise<void> {
+    await indexedDBStorage.resetDatabase();
+    this.connectedAccount = null;
   }
 
   // Register a contract with PXE
