@@ -23,6 +23,7 @@ export default function App() {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isLoadingTally, setIsLoadingTally] = useState(false);
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [isEndingVoting, setIsEndingVoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [account, setAccount] = useState<AccountWallet | null>(null);
@@ -198,7 +199,7 @@ export default function App() {
 
     const connectedAccount = wallet.getConnectedAccount();
     if (!connectedAccount) {
-      console.error('Cannot update tally. No account connected');
+      console.error('Cannot vote tally. No account connected');
       return;
     }
 
@@ -217,6 +218,36 @@ export default function App() {
       setError(error instanceof Error ? error.message : 'Failed to cast vote');
     } finally {
       setIsVoting(false);
+    }
+  }
+
+  async function endVoting() {
+    if (!wallet) {
+      console.error('Wallet not initialized');
+      return;
+    }
+
+    const connectedAccount = wallet.getConnectedAccount();
+    if (!connectedAccount) {
+      console.error('Cannot end vote. No account connected');
+      return;
+    }
+
+    try {
+      setIsEndingVoting(true);
+      setError(null);
+      const votingContract = await EasyPrivateVotingContract.at(
+        AztecAddress.fromString(contractAddress),
+        connectedAccount
+      );
+      const interaction = votingContract.methods.end_vote();
+      await wallet.sendTransaction(interaction);
+      await updateVoteTally();
+    } catch (error) {
+      console.error(error);
+      setError(error instanceof Error ? error.message : 'Failed to end voting');
+    } finally {
+      setIsEndingVoting(false);
     }
   }
 
@@ -287,6 +318,8 @@ export default function App() {
         connectTestAccount={connectTestAccount}
         connectStoredAccount={connectStoredAccount}
         resetWallets={resetWallets}
+        endVoting={endVoting}
+        endingVoting={isEndingVoting}
       />
     </div>
   );

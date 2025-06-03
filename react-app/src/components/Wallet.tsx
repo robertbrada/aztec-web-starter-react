@@ -13,11 +13,13 @@ interface WalletProps {
   createdAccounts: StoredAccount[];
   adminAddress: string;
   creatingAccount: boolean;
+  endingVoting: boolean;
   removeError: () => void;
   connectTestAccount: (index: number) => void;
   connectStoredAccount: (accountId: string) => void;
   resetWallets: () => void;
   createNewAccount: () => void;
+  endVoting: () => void;
 }
 
 const shortenAddress = (address: string): string => {
@@ -33,15 +35,18 @@ export function Wallet({
   wallet,
   adminAddress,
   creatingAccount,
+  endingVoting,
   removeError,
   connectTestAccount,
   connectStoredAccount,
   resetWallets,
   createNewAccount,
+  endVoting,
 }: WalletProps) {
   const walletConnected = wallet !== null;
   const connectedAccount = account;
   const connectedAccountAddress = connectedAccount?.getAddress().toString();
+  const isAdminConnected = adminAddress === connectedAccountAddress;
 
   return (
     <aside className="sticky top-0 p-4 shrink-0 flex-col lg:flex w-full lg:w-96 bg-white">
@@ -65,9 +70,21 @@ export function Wallet({
           </div>
         </div>
         <div className="text-sm text-text-primary flex items-center gap-2 font-bold">
-          <IconCircleFilled className={`w-3 text-black`} />
+          <IconCircleFilled
+            className={`w-3 ${isAdminConnected ? 'text-green' : 'text-black '}`}
+          />
           <div>Admin: {shortenAddress(adminAddress)}</div>
         </div>
+
+        {isAdminConnected && (
+          <button
+            className="mt-2 text-sm text-primary w-full hover:text-white bg-primary/5 hover:bg-primary px-2 py-2 rounded-md border border-primary/30 hover:border-primary flex items-center justify-center gap-2 transition-colors"
+            onClick={endVoting}
+            disabled={endingVoting}
+          >
+            {endingVoting ? 'Ending voting...' : 'End Voting'}
+          </button>
+        )}
 
         {/*
         Available Test Accounts 
@@ -148,7 +165,7 @@ export function Wallet({
               })}
           </div>
           <button
-            className={`text-text-secondary w-full hover:text-text-primary bg-bg-light hover:bg-bg-medium px-2 py-2 rounded-md mt-4 ${creatingAccount ? 'opacity-50' : ''}`}
+            className={`text-text-secondary w-full hover:text-text-primary bg-bg-light hover:bg-bg-medium border border-border px-2 py-2 rounded-md mt-4 ${creatingAccount ? 'opacity-50' : ''}`}
             onClick={() => createNewAccount()}
             disabled={creatingAccount}
           >

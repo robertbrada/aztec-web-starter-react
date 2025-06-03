@@ -129,7 +129,7 @@ export function Tally({
                       <div className="text-[1.1rem] flex flex-row font-medium ml-1 justify-between items-center">
                         <div className="flex flex-row gap-2 items-center">
                           <div className="font-bold">{candidateName}</div>
-                          <div className="text-sm font-normal text-text-tertiary">
+                          <div className="text-xs font-normal text-text-tertiary">
                             ({percentage}%)
                           </div>
                         </div>
@@ -170,7 +170,7 @@ export function Tally({
           </button>
         </div>
         <div className="flex gap-2 text-xs items-center mx-auto mt-10 justify-center">
-          <div className="opacity-100 text-text-secondary">Powered by</div>
+          <div className="opacity-70 text-text-secondary">Powered by</div>
           <img src={aztecLogo} alt="Aztec Logo" className="h-3" />
         </div>
       </div>
