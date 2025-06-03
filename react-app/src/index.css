@@ -1,3 +1,97 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@font-face {
+  font-family: 'SF Pro Display Bold';
+  src:
+    local('SF Pro Display Bold'),
+    url('./assets/fonts/SF_Pro_Display_Bold/SF-Pro-Display-Bold.ttf');
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: local('Satoshi'), url('./assets/fonts/Satoshi/Satoshi.ttf');
+  font-weight: medium;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: local('Satoshi'), url('./assets/fonts/Satoshi/Satoshi-Medium.ttf');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'TT Satoshi';
+  src:
+    local('TT Satoshi'), url('./assets/fonts/TTSatoshi/TTSatoshi-Medium.otf');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sohne';
+  src: local('Sohne'), url('./assets/fonts/Sohne/sohne-400-normal.woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Haffer';
+  src: local('Haffer'), url('./assets/fonts/Haffer/Haffer-Regular.c817e5bb');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Haffer';
+  src: local('Haffer'), url('./assets/fonts/Haffer/Haffer-Light.b477605d');
+  font-weight: light;
+  font-style: normal;
+}
+
+/* @font-face {
+  font-family: "Satoshi";
+  src: local("Satoshi"), url("./assets/fonts/Satoshi/Satoshi-Bold.ttf");
+  font-weight: bold;
+  font-style: normal;
+} */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* font-family: "SF Pro Display Bold"; */
+  font-family: 'Satoshi';
+  /* font-family: "Haffer"; */
+  /* font-family: "TT Satoshi"; */
+  /* font-family: "Source Serif Pro", serif; */
+  /* font-family: "Cabin Variable", sans-serif; */
+  /* font-family: "Poppins", sans-serif; */
+  /* font-family: "Lexend Deca Variable", sans-serif; */
+  /* font-family: "Rubik Variable", sans-serif; */
+  line-height: 1.5;
+  /* font-weight: lighter; */
+
+  /* color-scheme: light dark; */
+  /* color: rgba(255, 255, 255, 0.87); */
+  /* background-color: #242424; */
+
+  /* font-synthesis: none; */
+  /* text-rendering: optimizeLegibility; */
+  /* -webkit-font-smoothing: antialiased; */
+  /* -moz-osx-font-smoothing: grayscale; */
+
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  max-width: 1280px;
+  margin: 0 auto;
+}

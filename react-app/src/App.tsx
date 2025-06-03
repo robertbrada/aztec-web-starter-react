@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { EmbeddedWallet } from './embedded-wallet';
 import { AccountWallet, AztecAddress, Fr } from '@aztec/aztec.js';
 import { EasyPrivateVotingContract } from './artifacts/EasyPrivateVoting';
-
-const aztecNodeUrl = import.meta.env.AZTEC_NODE_URL;
-const contractAddress = import.meta.env.CONTRACT_ADDRESS;
-const deployerAddress = import.meta.env.DEPLOYER_ADDRESS;
-const deploymentSalt = import.meta.env.DEPLOYMENT_SALT;
-interface VoteResults {
-  [key: number]: bigint;
-}
+import { Tally } from './components/Tally';
+import { Wallet } from './components/Wallet';
+import {
+  aztecNodeUrl,
+  contractAddress,
+  deployerAddress,
+  deploymentSalt,
+} from './config';
+import type { VoteResults } from './config';
 
 export default function App() {
   const [voteTally, setVoteTally] = useState<VoteResults>({
@@ -21,6 +22,7 @@ export default function App() {
   });
   const [isVoting, setIsVoting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [account, setAccount] = useState<AccountWallet | null>(null);
@@ -76,15 +78,18 @@ export default function App() {
       return;
     }
     try {
+      setIsCreatingAccount(true);
       const account = await wallet.createAccountAndConnect();
       setAccount(account);
     } catch (error) {
       console.error('Failed to create account:', error);
+    } finally {
+      setIsCreatingAccount(false);
     }
   }
 
-  async function castVote(candidateId: number) {
-    console.log('Casting vote()');
+  async function vote(candidateId: number) {
+    console.log('Casting vote');
     // Validate candidate number
     setIsVoting(true);
     if (!wallet) {
@@ -98,12 +103,20 @@ export default function App() {
       return;
     }
 
+    console.log(
+      `Casting vote for candidate ${candidateId} from account ${connectedAccount.getAddress()}`
+    );
+
     try {
       const votingContract = await EasyPrivateVotingContract.at(
         AztecAddress.fromString(contractAddress),
         connectedAccount
       );
+      console.log(
+        `Voting contract address: ${votingContract.address.toString()}`
+      );
       const interaction = votingContract.methods.cast_vote(candidateId);
+      console.log(`Interaction: ${interaction.toString()}`);
       await wallet.sendTransaction(interaction);
       await updateVoteTally();
     } catch (error) {
@@ -140,34 +153,21 @@ export default function App() {
         results[i + 1] = value;
       })
     );
-
+    console.log('Vote tally results:', results);
     setVoteTally(results);
   }
 
   return (
-    <div className="flex flex-col w-96">
-      <h1>Private Voting</h1>
-      <div>Wallet status: {wallet ? 'Connected' : 'Not connected'}</div>
-      <div>
-        Account: {account ? account.getAddress().toString() : 'no account'}
-      </div>
-      <button className="my-2 p-2 bg-gray-300" onClick={createAccount}>
-        Create Account
-      </button>
-      <button className="my-2 p-2 bg-gray-300" onClick={() => castVote(4)}>
-        Vote
-      </button>
-      <button className="my-2 p-2 bg-gray-300" onClick={updateVoteTally}>
-        Update tally
-      </button>
-      <div className="my-2">
-        <h2>Vote Tally</h2>
-        {Object.entries(voteTally).map(([candidate, votes]) => (
-          <div key={candidate}>
-            Candidate {candidate}: {votes.toString()} votes
-          </div>
-        ))}
-      </div>
+    <div className="flex flex-col-reverse lg:flex-row">
+      <Tally
+        account={account}
+        isCreatingAccount={isCreatingAccount}
+        isVoting={isVoting}
+        results={voteTally}
+        createAccount={createAccount}
+        vote={vote}
+      />
+      <Wallet account={account} wallet={wallet} />
     </div>
   );
 }
